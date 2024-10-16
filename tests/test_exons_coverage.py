@@ -1,12 +1,15 @@
+import sys
+import os
+sys.path.append("/src")
 import pandas as pd
 import subprocess
-import os
-from utils import get_value_from_dict
+from src.utils import get_value_from_dict
 from tqdm import tqdm
 from colorama import Fore, Back, Style
-from LINE_preparation import LINE_Processing
+from src.LINE_preparation import LINE_Processing
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
-from concurrent.futures import ProcessPoolExecutor
+from tqdm.contrib.concurrent import process_map  # or thread_map
 
 class ExonCoverage:
 
@@ -16,18 +19,18 @@ class ExonCoverage:
         self.line_processing = LINE_Processing()
         self.cores = cores
 
-
     def coverage(self):
         LINE_genes = self.line_processing.filter_by_LINE_genes()
         only_exons_df = self.df.loc[(self.df['name'].str.contains('exon'))]
         filtered_df = only_exons_df.loc[(self.df['gene'].isin(LINE_genes))]
+        # filtered_df = filtered_df[:1001]
 
         dfs = self.split_df_to_cores(filtered_df)
         start_time = time.time()
         print(Fore.CYAN + Style.BRIGHT + "Получение покрытия у экзонов")
         
 
-        with ProcessPoolExecutor(max_workers=self.cores) as executor:
+        with ProcessPoolExecutor(max_workers=4) as executor:
             results = list(executor.map(self.multiple_coverage, dfs))            
 
         df_with_coverage = pd.concat(results)          
@@ -58,7 +61,7 @@ class ExonCoverage:
         filtered_df.loc[:, 'coverage'] = [self.get_coverage_to_exon(row) for row in tqdm(filtered_df.itertuples(), total=len(filtered_df))]
         return filtered_df
 
-        
+
     def get_coverage_to_exon(self, exon):
         exon = exon._asdict()
         chr = get_value_from_dict(vocab=exon, key="chrom")
