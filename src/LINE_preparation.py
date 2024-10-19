@@ -114,8 +114,17 @@ class ManagementLINE:
         df = df[['chrom', 'start', 'end', 'gene']]
         df.to_csv('LINE_seed_coords_in_genes.bed', index=False, sep='\t')
 
+def remove_duplicate():
+    df = pd.read_csv('../new_LINE_coords_in_browser.bed', sep='\t')
+    cols = ['chrom', 'chromStart', 'chromEnd', 'name', 'score', 'strand', 'thickStart', 'thickEnd', 'itemRgb']
+    df.columns = cols
+    print(df.head())
+    df = df.drop_duplicates(subset=['name'])
+    df.to_csv('../LINE_coords_in_genes.bed', sep='\t', index=False)
+
 if __name__ == "__main__":
 
     # res = line_processing.validate_min_distance_between_exon_and_LINE()
     # line_processing.get_LINE_intervals_to_genome_browser()
-    ManagementLINE.get_LINE_seed_coords()
+    # ManagementLINE.get_LINE_seed_coords()
+    remove_duplicate()

@@ -109,10 +109,12 @@ class TranscriptsDelta:
     def delta(self):
         files = get_files_with_extension('../coverage_seed/', 'csv')
         dataframes = self.load_files_to_dataframes(files)
-        dataframes_mod = self.drop_columns_from_dataframes(dataframes, columns_to_remove=[2,3,4])
+        dataframes_mod = self.drop_columns_from_dataframes(dataframes, columns_to_remove=[1,3,4])
         merged_df = self.merge_datafames(dataframes_mod)
         df_with_outlier = self.get_outlier(merged_df)
-        print(df_with_outlier.head())
+        # placenta_df_with_genes = self.add_gene_name_to_transcript_delta(merged_df)
+        # placenta_df_with_genes.to_csv('../clusters/combine_seed_in_transcripts.csv', sep='\t', index=False)
+
         df_with_mean_ER = self.apply_mean_to_df(df_with_outlier, [2, 3, 4, 5, 6, 7])
         df_with_delta = self.compute_experimental_control_delta(df_with_mean_ER, 'mean_ER_index')
         clusters_df = self.cluster_dataframe_by_delta(df_with_delta)
@@ -145,7 +147,7 @@ class TranscriptsDelta:
         column_names = ['transcript', 'index_SRX']
         for name, df in dataframes.items():
             column_names.append(name)
-            srx_df = srx_df.merge(df, on='name', how='inner')
+            srx_df = srx_df.merge(df, on='name', how='inner', suffixes=('', f'_{name}'))
         
         return srx_df
 
