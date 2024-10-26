@@ -12,7 +12,7 @@ class CoverageLINE_Seed:
         self.transcripts_coverage_df = df
         self.df_with_LINE_seed_coords_in_genes = df_LINE_seed_coord
         self.path_to_bamfile = path_to_bamfile
-        self.line_processing = LINE_Processing(df=pd.read_csv('../intersect_LINE_and_genome.bed', sep='\t'))
+        self.line_processing = LINE_Processing(df=pd.read_csv('../new_intersect_genes_and_LINE.bed', sep='\t'))
 
     def df_to_dict(self, index_name: str = None) -> dict:
         self.transcripts_coverage_df.set_index(index_name)
@@ -25,7 +25,7 @@ class CoverageLINE_Seed:
         transcripts_with_min_distance = self.line_processing.validate_min_distance_between_exon_and_LINE()
         print(Fore.CYAN + Style.BRIGHT + "Получение средней глубины покрытия у экзонов")
 
-        for transcript in tqdm(transcripts[:100]):
+        for transcript in tqdm(transcripts):
             if transcript in transcripts_with_min_distance:
                 transcript = self.transcripts_coverage_df[self.transcripts_coverage_df['name'] == transcript].iloc[0]
                 name = transcript['name']

@@ -19,8 +19,8 @@ class ExonCoverage:
 
     def coverage(self):
         LINE_genes = self.line_processing.filter_by_LINE_genes()
-        only_exons_df = self.df.loc[(self.df['name'].str.contains('exon'))]
-        filtered_df = only_exons_df.loc[(self.df['gene'].isin(LINE_genes))]
+        # only_exons_df = self.df.loc[(self.df['name'].str.contains('exon'))]
+        filtered_df = self.df.loc[(self.df['gene'].isin(LINE_genes))]
 
         dfs = self.split_df_to_cores(filtered_df)
         start_time = time.time()
@@ -78,12 +78,12 @@ class ExonCoverage:
 class SamtoolsCoverage:
 
     def __init__(self, path_to_bamfile: str) -> None:
-        self.path_to_bamfile = path_to_bamfile
+        self.path_to_file = path_to_bamfile
 
     def run_subprocess_command_and_return_result(self, command: list[str]):
         try:
-            coverage = subprocess.run(command, check=True, stdout=subprocess.PIPE)
-            return coverage.stdout.decode()
+            result = subprocess.run(command, check=True, stdout=subprocess.PIPE)
+            return result.stdout.decode()
         except subprocess.CalledProcessError as e:
             return (f'Command {e.cmd} failed with error {e.returncode}')
 
@@ -96,12 +96,12 @@ class SamtoolsCoverage:
         return f'{chr}:{start}-{end}'
     
     def get_bam_filename(self) -> str:
-        return self.path_to_bamfile
+        return self.path_to_file
 
 class CoverageManager:
 
     def coverage(args = None):
-        df = pd.read_csv('../genes/exons_and_intron_positions_in_genome.csv', sep='\t')
+        df = pd.read_csv('../genes/exons_positions_in_genome.csv', sep='\t')
         if not args.bamfile or not os.path.exists(args.bamfile):
             raise ValueError("BAM file does not exist or is not specified.")
         exon_coverage = ExonCoverage(df=df, bamfile = args.bamfile, cores = args.cores)
@@ -109,7 +109,7 @@ class CoverageManager:
         filtered_df.to_csv(args.output, sep='\t', index=False) 
 
 if __name__ == "__main__":
-    df = pd.read_csv('../genes/exons_and_intron_positions_in_genome.csv', sep='\t')
+    df = pd.read_csv('../genes/exons_positions_in_genome.csv', sep='\t')
     exon_coverage = ExonCoverage(df=df, bamfile='../../alter_LINE_expr/SRR14374304_sorted.bam', cores=4)
     filtered_df = exon_coverage.coverage()
     filtered_df.to_csv('SRX_exons_coverage.csv', sep='\t', index=False)

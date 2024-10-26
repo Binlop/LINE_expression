@@ -3,7 +3,10 @@ from bs4 import BeautifulSoup
 import schedule
 import time
 from urllib.parse import urlencode
-
+import pandas as pd
+from LINE_preparation import LINE_Processing
+from exons_coverage import SamtoolsCoverage
+import subprocess
 
 class BlastProtein:
 
@@ -71,7 +74,8 @@ class BlastProtein:
 
             print(f"Status: {status_value}, запрос {i[0]}")
             if status_value == "Searching":
-                schedule.every(10).seconds.do(lambda: self.check_status(rid, i, finished))
+                pass
+                # schedule.every(10).seconds.do(lambda: self.check_status(rid, i, finished))
 
 
     def extract_data(self, table_data):
@@ -90,8 +94,100 @@ class BlastProtein:
         return self.blast_data
 
 
+class Bedtools(SamtoolsCoverage):
+
+    def __init__(self, df: pd.DataFrame, transcript: str):
+        self.df = df
+        self.transcript = transcript
+        self.path_to_file = '/home/nock/VSC_Projects/alter_LINE_expr/human_genome/hg38.fa'
+    
+
+    def get_exons_positions_to_gene(self):
+        filtered_gene_segments = self.df.loc[self.df['transcript'] == self.transcript]
+        only_exons_df = filtered_gene_segments.loc[(self.df['name'].str.contains('exon'))]
+        return only_exons_df
+
+    def filter_exons_after_LINE(self, exons: pd.DataFrame, LINE: dict) -> pd.DataFrame:
+        exons['start'] = pd.to_numeric(exons['start'], errors='coerce')
+        exons['end'] = pd.to_numeric(exons['end'], errors='coerce')
+
+        gene = exons.iloc[0]['gene']
+        end_LINE = LINE[gene]['end']
+        strand_LINE = LINE[gene]
+        gene_stand = '+' if strand_LINE == '-' else '-'
+        if gene_stand == '+':
+            end_LINE = LINE[gene]['end']
+            exons_after_LINE = exons[exons['start'] > end_LINE]
+        elif gene_stand == '-':
+            start_LINE = LINE[gene]['start']
+            exons_after_LINE = exons[exons['end'] < start_LINE]
+        else:
+            raise ValueError(f'Undefined gene position: {gene_stand}')
+        
+        return exons_after_LINE
+    
+    def get_fasta_seq_from_exons(self, exons: list[dict]) -> list[str]:
+        exons_seq = []
+        for exon in exons:
+            chrom = exon['chrom']
+            start_exon = exon['start']
+            end_exon = exon['end']
+            seq = self.run_command_to_subprocces(chrom, start_exon, end_exon)
+            seq = self.processing_seq(seq)
+            exons_seq.append(seq)
+
+        return exons_seq
+
+    def processing_seq(self, fasta_seq: str):
+        return fasta_seq.split('\n')[1].upper()
+
+    def run_command_to_subprocces(self, chr, start, end):
+        fasta_file = self.get_bam_filename()
+        gene_position = self.get_gene_position(chr=chr, start=start, end=end)
+        
+        command = ["bedtools", "getfasta", "-fi", fasta_file, "-bed", "stdin"]
+        result = subprocess.run(command, input=gene_position, text=True, capture_output=True)
+
+        if result.returncode != 0:
+            raise Exception(f"Ошибка при выполнении bedtools getfasta: {result.stderr}")
+
+        return result.stdout
+
+    def get_gene_position(self, chr, start, end):
+        return f"{chr}\t{start}\t{end}\n"
+
+class BlastManager:
+
+    def blast(self):
+        gene_segments_df = pd.read_csv('../genes/exons_and_intron_positions_in_genome.csv', sep='\t')
+        bedtools = Bedtools(df=gene_segments_df, transcript='ENST00000615172.4')
+        genes_exons = bedtools.get_exons_positions_to_gene()
+        exons_seq = bedtools.get_fasta_seq_from_exons(exons=genes_exons.to_dict(orient='records'))
+        unite_seq = ''.join(exons_seq)
+        print('ДНК полностью')
+        print(unite_seq)
+
+        df = pd.read_csv('../intersect_LINE_and_genome.bed', sep='\t')
+        line_processing = LINE_Processing(df=df)
+        print('Фильтрация экзонов после LINE')
+        exons_after_LINE = bedtools.filter_exons_after_LINE(exons=genes_exons, LINE=line_processing.get_positions_last_LINE_interval())
+        exons_after_LINE = exons_after_LINE.to_dict(orient='records')
+        exons_seq = bedtools.get_fasta_seq_from_exons(exons=exons_after_LINE)
+        print(len(exons_seq))
+        unite_seq = ''.join(exons_seq)
+
+        print('ДНК от LINE до конца гена')
+        print(unite_seq)
+        blast_protein = BlastProtein(seq=unite_seq)
+        blast_protein.blast()
+        print(blast_protein.blast_data[0])
+
+
 if __name__ == "__main__":
-    sequence = "CTTTGCTGGGAAGAAAAGCAGAGGGCCTTTCCTGTCGCTTGCATCATCTTTCCTGCTCTGGTTTTATCTTGGAAACCTTGGGATCGAAGAAATTTTCCCAGTTCGTTTTCTTCTTGAGACAAGAA"
-    blast = BlastProtein(seq=sequence)
+    blast = BlastManager()
     blast.blast()
-    print(blast.blast_data[0])
+
+    # sequence = "CTTTGCTGGGAAGAAAAGCAGAGGGCCTTTCCTGTCGCTTGCATCATCTTTCCTGCTCTGGTTTTATCTTGGAAACCTTGGGATCGAAGAAATTTTCCCAGTTCGTTTTCTTCTTGAGACAAGAA"
+    # blast = BlastProtein(seq=sequence)
+    # blast.blast()
+    # print(blast.blast_data[0])

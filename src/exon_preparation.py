@@ -33,10 +33,10 @@ class USCS_Processing:
                 'gene': gene,
                 'strand': strand,
                 })
-            if i < count_exons-1:
-                if self.check_len_between_exon_and_intron(start=int(end_exons[i])+1, end=int(start_exons[i+1])-1):
-                    intron = self.make_intron(chr=chr, start=int(end_exons[i])+1, end=int(start_exons[i+1])-1, transcript_name=transcript_name, gene=gene, number_intron=i, strand=strand)
-                    self.gene_segments_coords.append(intron)
+            # if i < count_exons-1:
+            #     if self.check_len_between_exon_and_intron(start=int(end_exons[i])+1, end=int(start_exons[i+1])-1):
+            #         intron = self.make_intron(chr=chr, start=int(end_exons[i])+1, end=int(start_exons[i+1])-1, transcript_name=transcript_name, gene=gene, number_intron=i, strand=strand)
+            #         self.gene_segments_coords.append(intron)
             
     def make_intron(self, chr: str,  start: int, end: int, transcript_name: str, gene: str, number_intron: int, strand: str) -> dict:
         intron_name = self.get_intron_name_from_transcript(transcript=transcript_name, intron_number=number_intron)
@@ -62,11 +62,27 @@ class USCS_Processing:
         coords_exons_as_list = coords_exons.split(',')
         return coords_exons_as_list
 
+    def get_genes_border(self):
+        genes_coords = []
+        for gene, transcripts in self.df.groupby('geneName'):
+            max_exons_count = transcripts['exonCount'].max()
+            transcript_with_max_exons = transcripts[transcripts['exonCount'] == max_exons_count].iloc[0]
+            start_gene = transcript_with_max_exons['txStart']
+            end_gene = transcript_with_max_exons['txEnd']
+            protein_id = transcript_with_max_exons['proteinID']
+            strand = transcript_with_max_exons['strand']
+            genes_coords.append({'name': gene, 'start': start_gene, 'end_gene': end_gene, 'protein_id': protein_id, 'strand': strand})
+        return genes_coords
 
         
 if __name__ == "__main__":
-    df = pd.read_csv('../genes/all_transcript.csv')
+    df = pd.read_csv('../genes/genome.csv', sep='\t')
+    # df = df[:10]
+    df = df[df['chrom'].str.len() < 6]
     uscs_procc = USCS_Processing(df=df)
-    uscs_procc.iterate_rows_of_df_pandas()
-    df = pd.DataFrame(uscs_procc.gene_segments_coords)
-    df.to_csv("../genes/exons_and_intron_positions_in_genome.csv", sep='\t', index=False)
+    genes_coords = uscs_procc.get_genes_border()
+    df = pd.DataFrame(genes_coords)
+    df.to_csv('gene_borders.csv', sep='\t', index=False, na_rep=None)
+    # uscs_procc.iterate_rows_of_df_pandas()
+    # df = pd.DataFrame(uscs_procc.gene_segments_coords)
+    # df.to_csv("../genes/exons_positions_in_genome.csv", sep='\t', index=False)

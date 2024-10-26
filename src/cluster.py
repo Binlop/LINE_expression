@@ -22,7 +22,7 @@ class ExonsClusterization:
         undefined = []
 
         print(Fore.CYAN + Style.BRIGHT + "Кластеризация покрытий экзонов относительно LINE")
-        for exon in tqdm(exons[:100]):
+        for exon in tqdm(exons):
             coverage = get_value_from_dict(exon, 'coverage')
             transcript_name = get_value_from_dict(exon, 'transcript')
             gene_name = get_value_from_dict(exon, 'gene')
@@ -121,12 +121,13 @@ class TranscriptsDelta:
         placenta_df_with_genes = self.add_gene_name_to_transcript_delta(clusters_df['placenta_genes'])
         placenta_df_with_genes.to_csv('../clusters/placenta_transcripts.csv', sep='\t', index=False)
 
-    def load_files_to_dataframes(self, files: list[str]) -> dict[str, pd.DataFrame]:
+    def load_files_to_dataframes(self, files: list[str], key_field: str = 'index') -> dict[str, pd.DataFrame]:
         dataframes = {}
         for file in files:
             uniq_file_name = file.split('/')[-1].split('_')[0]
             df = pd.read_csv(file, sep='\t')
-            df = df.rename(columns={'index': f'index_{uniq_file_name}'})
+            # df = df[:100]
+            df = df.rename(columns={key_field: f'{key_field}_{uniq_file_name}'})
             dataframes[uniq_file_name] = df
         return dataframes
 
@@ -206,7 +207,7 @@ class ManagerCluster:
         if not args.input or not os.path.exists(args.input):
             raise ValueError("Input file with exons coverage does not exist or is not specified.")
 
-        df = pd.read_csv('../intersect_LINE_and_genome.bed', sep='\t')
+        df = pd.read_csv('../new_intersect_genes_and_LINE.bed', sep='\t')
         line_processing = LINE_Processing(df=df)
         LINE_coords_in_genes = line_processing.get_positions_last_LINE_interval()
 

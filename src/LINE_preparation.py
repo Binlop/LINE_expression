@@ -6,28 +6,57 @@ class LINE_Processing:
 
     def filter_intersect_LINE_and_genes_by_strand(self):
         """Оставляем только строки, где направление гена противоположно направлению LINE"""
+        columns = ['chrom', 'start', 'end', 'gene',  'strand', 'description', 'chrLINE', 'startLINE', 'endLINE', 'LINE_ID', 'strandLINE']
+        self.df.columns = columns
         filter_df = self.df.loc[(self.df["strand"] != self.df["strandLINE"])]
         return filter_df
     
-    def get_positions_last_LINE_interval(self):
-        """Получение для генов координат вставки LINE, наиболее ближайшей к концу гена"""
-        LINE_coords_in_transcripts = {}
+    def get_positions_last_LINE_interval(self) -> dict[str, dict]:
+        """Получение для генов координат вставки LINE, наиболее ближайшей к концу гена.
+
+        Функция группирует данные по генам и фильтрует вставки LINE, которые находятся внутри генов.
+        Для каждого гена определяется вставка LINE, наиболее ближайшая к концу гена, в зависимости от
+        направления гена (`strand`). Если `strand` равен '+', то выбирается вставка с максимальными
+        координатами, если `strand` равен '-', то выбирается вставка с минимальными координатами.
+
+        Parameters
+        ----------
+        self : object
+            Объект, содержащий DataFrame с данными о генах и вставках LINE.
+
+        Returns
+        -------
+        LINE_coords_in_genes : 
+            Словарь, где ключи — это имена генов, а значения — словари с координатами вставки LINE,
+            наиболее ближайшей к концу гена. Каждый словарь содержит два ключа:
+            - 'start': int — начальная координата вставки LINE.
+            - 'end': int — конечная координата вставки LINE.
+
+        Raises
+        -------
+        ValueError
+            Если значение `strand` не равно '+' или '-'.
+        """
+        LINE_coords_in_genes = {}
         grouped = self.df.groupby('gene')
         for gene, group in grouped:
             strand = group['strand'].iloc[0]
-            if strand == '+':
-                max_start = group['startLINE'].max()
-                max_end = group['endLINE'].max()
+            startGene = group['start'].iloc[0]
+            endGene = group['end'].iloc[0]
+            filter_group = group.loc[(group['startLINE'] > startGene) & (group['endLINE'] < endGene)]
+            if not filter_group.empty:
+                if strand == '+':
+                    max_start = filter_group['startLINE'].max()
+                    max_end = filter_group['endLINE'].max()
+                elif strand == '-':
+                    max_start = filter_group['startLINE'].min()
+                    max_end = filter_group['endLINE'].min()
+                else:
+                    raise ValueError(f'This {strand} was not possible')
+                
+                LINE_coords_in_genes[gene] = {'start': max_start, 'end': max_end}
 
-            elif strand == '-':
-                max_start = group['startLINE'].min()
-                max_end = group['endLINE'].min()
-            else:
-                raise ValueError(f'This {strand} was not possible')
-            
-            LINE_coords_in_transcripts[gene] = {'start': max_start, 'end': max_end}
-
-        return LINE_coords_in_transcripts
+        return LINE_coords_in_genes
     
     def get_positions_LINE_seed_in_genes(self) -> dict:
         LINE_coords_in_genes = self.get_positions_last_LINE_interval()
@@ -43,19 +72,22 @@ class LINE_Processing:
             elif strand_gene == '-':
                 start_LINE = LINE_coords_in_genes[gene]['start']
                 LINE_seed_coords_in_genes[gene] = {'chrom': chrom, 'start': start_LINE-variation, 'end': start_LINE + variation}
+            else:
+                print('нелогично')
+                print(strand_gene)
 
         return LINE_seed_coords_in_genes
 
-    def validate_min_distance_between_exon_and_LINE(self) -> bool:
+    def validate_min_distance_between_exon_and_LINE(self) -> list[str]:
         """Проверка, что между интервалом LINE и экзоном более 30 нуклеотидов"""
-        gene_segments_df = pd.read_csv('../genes/exons_and_intron_positions_in_genome.csv', sep='\t')
-        only_exons_df = gene_segments_df.loc[(gene_segments_df['name'].str.contains('exon'))]
+        gene_segments_df = pd.read_csv('../genes/exons_positions_in_genome.csv', sep='\t')
+        # only_exons_df = gene_segments_df.loc[(gene_segments_df['name'].str.contains('exon'))]
 
         LINE_genes = self.filter_by_LINE_genes()
-        LINE_exons_df = only_exons_df.loc[(only_exons_df['gene'].isin(LINE_genes))]
+        LINE_exons_df = gene_segments_df.loc[(gene_segments_df['gene'].isin(LINE_genes))]
 
         LINE_coords = self.get_positions_last_LINE_interval()
-
+        # print(LINE_coords)
         grouped = LINE_exons_df.groupby('transcript')
 
         filtered_transcripts = []
@@ -86,7 +118,7 @@ class LINE_Processing:
             return True if start_LINE - end_exon > min_distance or start_LINE - start_exon > 0 else False
 
     def filter_by_LINE_genes(self):
-        intersect_LINE_and_genes_df = pd.read_csv("../intersect_LINE_and_genome.bed", sep='\t')
+        intersect_LINE_and_genes_df = pd.read_csv("../new_intersect_genes_and_LINE.bed", sep='\t')
         LINE_genes = list(set(intersect_LINE_and_genes_df['gene']))
         return LINE_genes
 
@@ -105,9 +137,8 @@ class ManagementLINE:
         pass
 
     def get_LINE_seed_coords():
-        df = pd.read_csv('../intersect_LINE_and_genome.bed', sep='\t')
+        df = pd.read_csv('../new_intersect_genes_and_LINE.bed', sep='\t')
         line_processing = LINE_Processing(df=df)
-        # LINE_coords_in_transcripts = line_processing.get_positions_last_LINE_interval()
         LINE_seed_coords_in_genes = line_processing.get_positions_LINE_seed_in_genes()
         LINE_seed_coords_list = [{'gene': gene, **values} for gene, values in LINE_seed_coords_in_genes.items()]
         df = pd.DataFrame(LINE_seed_coords_list)
@@ -123,8 +154,12 @@ def remove_duplicate():
     df.to_csv('../LINE_coords_in_genes.bed', sep='\t', index=False)
 
 if __name__ == "__main__":
-
+    # df = pd.read_csv('../intersect_genes_and_LINE.bed', sep='\t')
+    # processing = LINE_Processing(df)
+    # filter_df = processing.filter_intersect_LINE_and_genes_by_strand()
+    # print(len(set(filter_df['gene'])))
+    # filter_df.to_csv('new_intersect_genes_and_LINE.bed', sep='\t', index=False)
     # res = line_processing.validate_min_distance_between_exon_and_LINE()
     # line_processing.get_LINE_intervals_to_genome_browser()
-    # ManagementLINE.get_LINE_seed_coords()
-    remove_duplicate()
+    ManagementLINE.get_LINE_seed_coords()
+    # remove_duplicate()
