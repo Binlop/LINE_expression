@@ -107,27 +107,32 @@ class ExonsClusterization:
 class TranscriptsDelta:
 
     def delta(self):
-        files = get_files_with_extension('../coverage_seed/', 'csv')
+        files = get_files_with_extension('../gencode47/normalization_data/coverage_seed/with_indexes/', 'csv')
         dataframes = self.load_files_to_dataframes(files)
-        dataframes_mod = self.drop_columns_from_dataframes(dataframes, columns_to_remove=[1,3,4])
+        dataframes_mod = self.drop_columns_from_dataframes(dataframes, columns_to_remove=[2,3,4,5])
         merged_df = self.merge_datafames(dataframes_mod)
         df_with_outlier = self.get_outlier(merged_df)
-        # placenta_df_with_genes = self.add_gene_name_to_transcript_delta(merged_df)
-        # placenta_df_with_genes.to_csv('../clusters/combine_seed_in_transcripts.csv', sep='\t', index=False)
 
-        df_with_mean_ER = self.apply_mean_to_df(df_with_outlier, [2, 3, 4, 5, 6, 7])
+        df_with_mean_ER = self.apply_mean_to_df(df_with_outlier, [2, 3])
         df_with_delta = self.compute_experimental_control_delta(df_with_mean_ER, 'mean_ER_index')
         clusters_df = self.cluster_dataframe_by_delta(df_with_delta)
+        print('cluster_dataframe_by_delta прошло')
         placenta_df_with_genes = self.add_gene_name_to_transcript_delta(clusters_df['placenta_genes'])
-        placenta_df_with_genes.to_csv('../clusters/placenta_transcripts.csv', sep='\t', index=False)
+
+        print(f'Кол-во генов с разницей больше 0.1: {len(set(placenta_df_with_genes['gene']))}')
+
+        df = placenta_df_with_genes[placenta_df_with_genes['outlier'] == True]
+        print(f'Кол-во генов с разницей больше 0.1 и выбросом True: {len(set(df['gene']))}')
+
+        placenta_df_with_genes.to_csv('../clusters/291024_placenta_transcripts.csv', sep='\t', index=False)
 
     def load_files_to_dataframes(self, files: list[str], key_field: str = 'index') -> dict[str, pd.DataFrame]:
         dataframes = {}
         for file in files:
             uniq_file_name = file.split('/')[-1].split('_')[0]
+            print(uniq_file_name)
             df = pd.read_csv(file, sep='\t')
-            # df = df[:100]
-            df = df.rename(columns={key_field: f'{key_field}_{uniq_file_name}'})
+            df = df.rename(columns={key_field: f'{uniq_file_name}_{key_field}'})
             dataframes[uniq_file_name] = df
         return dataframes
 
@@ -145,7 +150,7 @@ class TranscriptsDelta:
         if srx_df is None:
             raise ValueError(f'Датафрейм с контролем отсутствует: {srx_df}')
 
-        column_names = ['transcript', 'index_SRX']
+        column_names = ['transcript', 'SRX_index']
         for name, df in dataframes.items():
             column_names.append(name)
             srx_df = srx_df.merge(df, on='name', how='inner', suffixes=('', f'_{name}'))
@@ -164,7 +169,7 @@ class TranscriptsDelta:
 
     def compute_experimental_control_delta(self, df: pd.DataFrame, column_name_with_exp_value: str) -> pd.DataFrame:
         """Расчет дельта на основе разницы между (средним индексом опытных - индекс контроля)"""
-        df["delta"] = df.apply(lambda x: x[column_name_with_exp_value] - x["index_SRX"], axis=1)    
+        df["delta"] = df.apply(lambda x: x[column_name_with_exp_value] - x["SRX_index"], axis=1)    
         return df     
     
     def cluster_dataframe_by_delta(self, df: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -174,7 +179,7 @@ class TranscriptsDelta:
         return cluster_dfs
 
     def get_trascripts_genes(self):
-        df = pd.read_csv('../genes/exons_and_intron_positions_in_genome.csv', sep='\t')
+        df = pd.read_csv('../genes/exons_positions_in_genome.csv', sep='\t')
         df = df.drop_duplicates(subset='transcript')
         df.set_index('transcript', inplace=True)
         transcripts_with_genes = df.to_dict(orient='index')
@@ -190,13 +195,13 @@ class TranscriptsDelta:
         return df
 
     def check_outlier(self, row):
-        q1 = np.percentile(row[2:8], 25)
+        q1 = np.percentile(row[2:4], 25)
         name = row['name']
         if name == 'ENST00000426083.5':
             print(row)     
-        q3 = np.percentile(row[2:8], 75)        
+        q3 = np.percentile(row[2:4], 75)        
         IQ = q3 - q1
-        index_SRX = row["index_SRX"]
+        index_SRX = row["SRX_index"]
         if index_SRX > q3 + IQ*1.5 or index_SRX < q1 - IQ*1.5:
             return True
         else: return False
@@ -222,5 +227,4 @@ class ManagerCluster:
 if __name__ == "__main__":
         delta = TranscriptsDelta()
         delta.delta()
-
 

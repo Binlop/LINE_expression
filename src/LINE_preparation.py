@@ -83,14 +83,14 @@ class LINE_Processing:
         gene_segments_df = pd.read_csv('../genes/exons_positions_in_genome.csv', sep='\t')
         # only_exons_df = gene_segments_df.loc[(gene_segments_df['name'].str.contains('exon'))]
 
-        LINE_genes = self.filter_by_LINE_genes()
+        LINE_coords = self.get_positions_last_LINE_interval()
+        LINE_genes = LINE_coords.keys()
         LINE_exons_df = gene_segments_df.loc[(gene_segments_df['gene'].isin(LINE_genes))]
 
-        LINE_coords = self.get_positions_last_LINE_interval()
-        # print(LINE_coords)
+
         grouped = LINE_exons_df.groupby('transcript')
 
-        filtered_transcripts = []
+        transcripts_with_LINE_exon_overlap = []
         for transcript, group in grouped:
             gene = group['gene'].iloc[0]
             strand = group['strand'].iloc[0]
@@ -101,21 +101,22 @@ class LINE_Processing:
                 end_LINE = LINE_coords[gene]['end']
 
                 if strand == '+':
-                    if self.check_exon_coord_and_LINE(start_exon, end_exon, start_LINE, end_LINE):
-                        filtered_transcripts.append(transcript)
+                    if not self.check_exon_coord_and_LINE(start_exon, end_exon, start_LINE, end_LINE):
+                        transcripts_with_LINE_exon_overlap.append(transcript)
 
                 elif strand == '-':
-                    if self.check_exon_coord_and_LINE(start_exon, end_exon, start_LINE, end_LINE, forward_strand=False):
-                        filtered_transcripts.append(transcript)
+                    if not self.check_exon_coord_and_LINE(start_exon, end_exon, start_LINE, end_LINE, forward_strand=False):
+                        transcripts_with_LINE_exon_overlap.append(transcript)
 
-        return list(set(filtered_transcripts))
+        print('Пропущенные транскрипты', len(transcripts_with_LINE_exon_overlap))
+        return list(set(transcripts_with_LINE_exon_overlap))
 
     def check_exon_coord_and_LINE(self, start_exon: int, end_exon: int, start_LINE: int, end_LINE: int, forward_strand: bool = True) -> bool:
-        min_distance = 35
+        min_distance = 40
         if forward_strand:
-            return True if start_exon - end_LINE > min_distance  or end_LINE - end_exon > 0 else False
+            return True if start_exon - end_LINE > min_distance  or end_LINE - end_exon > min_distance else False
         else:
-            return True if start_LINE - end_exon > min_distance or start_LINE - start_exon > 0 else False
+            return True if start_LINE - end_exon > min_distance or start_exon - start_LINE > min_distance else False
 
     def filter_by_LINE_genes(self):
         intersect_LINE_and_genes_df = pd.read_csv("../new_intersect_genes_and_LINE.bed", sep='\t')

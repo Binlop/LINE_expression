@@ -22,40 +22,25 @@ class DeSeq(TranscriptsDelta):
         super().__init__()
         self.cores = cores
         self.normal_df: pd.DataFrame = None
-        self.column_name_with_data = 'coverage_after_LINE'
+        self.column_name_with_data = 'count_reads_with_LINE'
 
 
     def deseq(self):
-        path_to_files = '../output_files/real_data/'
-        # path_to_files = './test_cluster'
+        path_to_files = '../gencode47/raw_data/coverage_seed/'
         files = get_files_with_extension(path_to_files, 'csv')
         dataframes = self.load_files_to_dataframes(files, key_field=self.column_name_with_data)
         copies = self.make_dfs_copies(dataframes)
-        dataframes_mod = self.drop_columns_from_dataframes(dataframes, columns_to_remove=[1,3,4,5])
+        dataframes_mod = self.drop_columns_from_dataframes(dataframes, columns_to_remove=[2,3])
         merged_df = self.merge_datafames(dataframes_mod)
+        print(merged_df.head())
         columns = ['name', 'SRX', 'ER12', 'ER13']
         merged_df.columns = columns
         merged_df.set_index('name', inplace=True)
         df_transposed = merged_df.T
         df_transposed.loc[:, df_transposed.columns != 'name'] = df_transposed.loc[:, df_transposed.columns != 'name'].astype(int)
-        # print(df_transposed.head())
-
 
         res, size_factors = deseq2_norm(df_transposed)
 
-        # args = [(sample_name, df) for sample_name, df in copies.items()]
-        # start = time.time()
-        # self.normal_df = res
-        # with Pool(self.cores) as pool:
-        #     # Применение функции process_sample к каждому DataFrame параллельно
-        #     results = pool.map(self.update_coverage_pool, args)
-
-        # processed_dict = {sample_name: df_normalized for sample_name, df_normalized in results}
-        # end = time.time()
-        # total = end - start
-        # print(processed_dict)
-        
-        # print(f'Итоговое время выполнения программы: {total:.2f} секунд')        
         start = time.time()
         update_coverage = self.update_coverage(res, copies)
         end = time.time()
@@ -63,13 +48,7 @@ class DeSeq(TranscriptsDelta):
         print(f'Итоговое время выполнения программы: {total:.2f} секунд')        
 
         self.dfs_to_files(update_coverage)
-        # df_metadata = self.get_metadata()
-        # dds = self.normalization_expression(df_transposed, df_metadata)
-        # normalized_counts = dds.normalized_counts
-        # normalized_counts.to_csv(os.path.join(OUTPUT_PATH, "normalized_counts.csv"), sep='\t')
-        # print(normalized_counts)
-        # self.get_and_write_stat(dds)
-        # print(df_transposed.head())
+
 
     def make_dfs_copies(self, dfs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         copies = {}
@@ -109,7 +88,7 @@ class DeSeq(TranscriptsDelta):
             original_df = original_dfs[df_name]
             for transcript, norm_coverage in row.items():
                 if transcript != 'name':
-                    original_df.loc[original_df['name'] == transcript, f'{self.column_name_with_data}_{name}'] = norm_coverage
+                    original_df.loc[original_df['name'] == transcript, f'{name}_{self.column_name_with_data}'] = norm_coverage
                 
             original_dfs[df_name] = original_df
             
@@ -128,10 +107,10 @@ class DeSeq(TranscriptsDelta):
         os.makedirs(path, exist_ok=True)
 
     def dfs_to_files(self, dfs: dict[str, pd.DataFrame]):
-        output_path = '../output_files/real_data/'
+        output_path = '../gencode47/raw_data/coverage_seed/'
         self.check_path_exist(output_path)
         for name, df in dfs.items():
-            df.to_csv(os.path.join(output_path, f'{name}_update_coverage.csv'), sep='\t', index=False)
+            df.to_csv(os.path.join(output_path, f'{name}_upd_cov_seed.csv'), sep='\t', index=False)
 
 
 if __name__ == '__main__':

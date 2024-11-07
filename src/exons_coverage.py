@@ -19,14 +19,12 @@ class ExonCoverage:
 
     def coverage(self):
         LINE_genes = self.line_processing.filter_by_LINE_genes()
-        # only_exons_df = self.df.loc[(self.df['name'].str.contains('exon'))]
         filtered_df = self.df.loc[(self.df['gene'].isin(LINE_genes))]
 
         dfs = self.split_df_to_cores(filtered_df)
         start_time = time.time()
         print(Fore.CYAN + Style.BRIGHT + "Получение покрытия у экзонов")
         
-
         with ProcessPoolExecutor(max_workers=self.cores) as executor:
             results = list(executor.map(self.multiple_coverage, dfs))            
 
@@ -54,7 +52,7 @@ class ExonCoverage:
         
         return dfs
 
-    def multiple_coverage(self, filtered_df):
+    def multiple_coverage(self, filtered_df: pd.DataFrame) -> pd.DataFrame:
         filtered_df.loc[:, 'coverage'] = [self.get_coverage_to_exon(row) for row in tqdm(filtered_df.itertuples(), total=len(filtered_df))]
         return filtered_df
 
